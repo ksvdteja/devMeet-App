@@ -59,30 +59,33 @@ userRouter.get("/feed", userAuth, async (req, res) => {
     // 2. ignored people
     // 3. already sent the connection request
     const loggedInUser = req.user;
+    // Validate and parse pagination parameters
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    let limit = parseInt(req.query.limit) || 10;
     limit = limit > 50 ? 50 : limit;
     const skip = (page - 1) * limit;
+    // Fetch connection requests involving the logged-in user
     const connectionRequests = await ConnectionRequest.find({
       $or: [{ fromUserId: loggedInUser._id }, { toUserId: loggedInUser._id }],
     }).select("fromUserId toUserId");
+    // Build a set of user IDs to exclude from the feed
     const hideUsersFromFeed = new Set();
     connectionRequests.forEach((req) => {
       hideUsersFromFeed.add(req.fromUserId.toString());
       hideUsersFromFeed.add(req.toUserId.toString());
     });
+    // Add the logged-in user's ID to the exclusion set
+    hideUsersFromFeed.add(loggedInUser._id.toString());
+    // Fetch users for the feed, excluding the hidden users
     const users = await User.find({
-      $and: [
-        { _id: { $nin: Array.from(hideUsersFromFeed) } },
-        { _id: { $ne: loggedInUser._id } },
-      ],
+      _id: { $nin: Array.from(hideUsersFromFeed) },
     })
       .select(USER_SAFE_DATA)
       .skip(skip)
       .limit(limit);
     res.json({ data: users });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(500).json({ message: err.message });
   }
 });
 
